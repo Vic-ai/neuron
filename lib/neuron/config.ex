@@ -28,7 +28,8 @@ defmodule Neuron.Config do
   - connection_opts: additional options to be passed to connection library
   - connection_module: module to be used for connecting to GQL API. Default is Neuron.Connection.Http
   - json_library: JSON library. Default is Jason.
-  - parse_options: options to be passed to the JSON library when decoding JSON
+  - parse_options: options to be passed to the JSON library when decoding JSON.
+    Not supported (ignored with a warning) when json_library is Elixir's built-in JSON module.
 
   ## Examples
 

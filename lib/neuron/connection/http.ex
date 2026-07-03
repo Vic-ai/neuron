@@ -2,6 +2,8 @@ defmodule Neuron.Connection.Http do
   @moduledoc false
   @behaviour Neuron.Connection
 
+  require Logger
+
   alias Neuron.{Config, ConfigUtils, JSONParseError, Response}
 
   @impl Neuron.Connection
@@ -39,7 +41,7 @@ defmodule Neuron.Connection.Http do
   defp handle(response, json_library, parse_options)
 
   defp handle({:ok, response}, json_library, parse_options) do
-    case json_library.decode(response.body, parse_options) do
+    case decode(json_library, response.body, parse_options) do
       {:ok, body} -> build_response_tuple(%{response | body: body})
       {:error, error} -> handle_unparsable(response, error)
       {:error, error, _} -> handle_unparsable(response, error)
@@ -47,6 +49,20 @@ defmodule Neuron.Connection.Http do
   end
 
   defp handle({:error, _} = response, _, _), do: response
+
+  # Elixir's built-in JSON module (Elixir >= 1.18) has no decode/2 that
+  # accepts parse options, so it gets a dedicated clause.
+  defp decode(JSON, body, []), do: JSON.decode(body)
+
+  defp decode(JSON, body, parse_options) do
+    Logger.warning(
+      "Neuron: parse_options #{inspect(parse_options)} are not supported by the built-in JSON module and will be ignored"
+    )
+
+    JSON.decode(body)
+  end
+
+  defp decode(json_library, body, parse_options), do: json_library.decode(body, parse_options)
 
   defp build_response_tuple(%{status_code: 200} = response) do
     {

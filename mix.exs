@@ -9,16 +9,14 @@ defmodule Neuron.Mixfile do
       app: :neuron,
       description: "A GraphQL client for elixir.",
       version: @version,
-      elixir: "~> 1.7",
-      build_embedded: Mix.env() == :prod,
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      test_coverage: [tool: Coverex.Task],
       aliases: aliases(),
       package: package(),
       deps: deps(),
       docs: docs(),
       dialyzer: [
-        plt_add_deps: :transitive,
+        plt_add_deps: :app_tree,
         plt_add_apps: [:mix],
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"}
       ]
@@ -31,14 +29,14 @@ defmodule Neuron.Mixfile do
 
   defp deps do
     [
-      {:httpoison, "~> 1.0 or ~> 2.0"},
-      {:coverex, "~> 1.5", only: :test},
-      {:credo, "~> 1.1", only: [:dev, :test]},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:httpoison, "~> 1.0 or ~> 2.0 or ~> 3.0"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:jason, "~> 1.1", optional: true},
-      {:mock, "~> 0.3.3", only: :test},
-      {:poison, "~> 4.0", only: :test}
+      {:jason, "~> 1.4", optional: true},
+      {:mox, "~> 1.1", only: :test},
+      {:sham, "~> 1.0", only: :test},
+      {:bandit, "~> 1.0", only: :test}
     ]
   end
 

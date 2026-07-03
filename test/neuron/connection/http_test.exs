@@ -1,15 +1,13 @@
 defmodule Neuron.Connection.HttpTest do
   use ExUnit.Case
 
-  import Mock
-
   alias Neuron.{
     Connection,
     JSONParseError,
     Response
   }
 
-  @json_libraries [Jason, Poison]
+  @json_libraries [Jason, JSON]
 
   def build_response(status_code, body) do
     %{
@@ -26,10 +24,16 @@ defmodule Neuron.Connection.HttpTest do
     }
   end
 
-  describe "build_headers/0" do
+  describe "post/2" do
     setup do
       Neuron.Config.set(nil)
-      %{url: "http://www.example.com/graph", query: %{}}
+      sham = Sham.start()
+
+      %{
+        sham: sham,
+        url: "http://localhost:#{sham.port}/graph",
+        query: ~s({"query": "{ users { name } }", "variables": {}})
+      }
     end
 
     test "missing url raises", %{query: query} do
@@ -38,37 +42,43 @@ defmodule Neuron.Connection.HttpTest do
       end
     end
 
-    test "with basic auth", %{url: url, query: query} do
-      with_mock HTTPoison,
-        post: fn _url, _query, _headers, _opts ->
-          {:ok, %HTTPoison.Response{}}
-        end do
-        headers = [hackney: [basic_auth: [user: "password"]]]
-        Connection.Http.post(query, url: url, headers: headers, connection_opts: [])
+    test "sends the query with default and custom headers", %{
+      sham: sham,
+      url: url,
+      query: query
+    } do
+      Sham.expect(sham, "POST", "/graph", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body == query
+        assert Plug.Conn.get_req_header(conn, "content-type") == ["application/json"]
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Basic dXNlcjpwYXNzd29yZA=="]
+        Plug.Conn.resp(conn, 200, ~s({"data": {"users": []}}))
+      end)
 
-        assert called(
-                 HTTPoison.post(
-                   url,
-                   query,
-                   Keyword.put(headers, :"Content-Type", "application/json"),
-                   []
-                 )
-               )
-      end
+      headers = [Authorization: "Basic dXNlcjpwYXNzd29yZA=="]
+
+      assert {:ok, %HTTPoison.Response{status_code: 200}} =
+               Connection.Http.post(query, url: url, headers: headers, connection_opts: [])
     end
 
-    test "with custom connection options", %{url: url, query: query} do
-      with_mock HTTPoison,
-        post: fn _url, _query, _headers, _opts ->
-          {:ok, %HTTPoison.Response{}}
-        end do
-        connection_opts = [timeout: 50_000]
-        Connection.Http.post(query, url: url, headers: [], connection_opts: connection_opts)
+    test "passes custom connection options to the HTTP client", %{
+      sham: sham,
+      url: url,
+      query: query
+    } do
+      # the :params option is applied by HTTPoison as the query string, so the
+      # server observing it proves connection_opts reach the HTTP client
+      Sham.expect(sham, "POST", "/graph", fn conn ->
+        assert conn.query_string == "token=abc"
+        Plug.Conn.resp(conn, 200, ~s({"data": null}))
+      end)
 
-        assert called(
-                 HTTPoison.post(url, query, ["Content-Type": "application/json"], timeout: 50_000)
+      assert {:ok, %HTTPoison.Response{status_code: 200}} =
+               Connection.Http.post(query,
+                 url: url,
+                 headers: [],
+                 connection_opts: [params: [token: "abc"]]
                )
-      end
     end
   end
 
@@ -94,7 +104,8 @@ defmodule Neuron.Connection.HttpTest do
       end
     end
 
-    for json_library <- @json_libraries do
+    # the built-in JSON module does not support parse options such as keys: :atoms
+    for json_library <- [Jason] do
       test "returns the parsed Response struct with atom keys in the body map using #{json_library}",
            %{
              response: response
@@ -209,7 +220,7 @@ defmodule Neuron.Connection.HttpTest do
 
         assert %JSONParseError{error: error, response: response} = parse_error
 
-        assert is_map(error)
+        refute is_nil(error)
         assert is_map(response)
         assert :maps.is_key(:__struct__, response)
         assert :maps.get(:__struct__, response) == Response
